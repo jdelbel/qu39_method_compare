@@ -70,11 +70,14 @@ chem_long <- arrange(mutate(chem_long,
 ```
 
 ```{r}
+#Set Color palette for plotting. Currently based on QU39 manuscript.
 color_palette <- c("#ff8000", "#ff99c7", "#4d6600", "#ff0000",
                    "#ffff00", "#00ff00", "#7d4dcc", "#000000")
 
+#Set month labels for plot
 month_labels <- c('J','F','M','A','M','J','J','A','S','O','N','D')
 
+#Plots a comparison of the two consequative chemtax runs. The analysis is quite stable, with the second run showing slightly reduced dictyochophyte, raphidophyte and cryptophyte biomass and increased green algae biomass. Prasinoxanthin shows a high correlation with chlorophyll b suggesting the dominance of prasinophytes. Lutein and chl by are not correlated suggesting a lack of chlorophytes.
 chem_long %>% 
   group_by(run, date, site_id, phyto_group) %>% 
   summarise(TChla_mean = mean(TChla)) %>% #This computes a daily average to deal with duplicates
