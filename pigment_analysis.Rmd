@@ -1,0 +1,155 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+#Load packages
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(viridis)
+library(hrbrthemes)
+library(gsw)
+library(corrr)
+library(corrplot)
+#library(table1)
+```
+
+```{r}
+#Upload HPLC data from portal (should figure out how to do this via that API)
+hplc <- read.csv("hplc.csv")
+
+#Remove unused columns, then re-order pigments to match retention/peak time. Remove pigments not used for Chemtax (need to consider this as some might be useful). Might be best to actually keep all of the pigments and then filter for them when making plots. This way it is more adaptive?
+hplc <- hplc %>%
+  select(!c(ï..action, event_pk, rn, organization, survey, source,
+                         project_specific_id, collected:acidified,
+                         lab_technician:tac_peak, all_chl_a_flag,
+                         comments:quality_level)) %>% 
+  select(date:volume, analyzing_lab, chl_c3, chl_c1, chl_c2, chl_c1_c2, peri,
+         bf_19 = X_19_but, fuco, hf_19 = X_19_hex, neo = neoxanthin,
+         prasino = prasinoxanthin, viola = violaxanthin,
+         allox = alloxanthin, lutein, zea = zeaxanthin, chl_b,
+         TChla = total_chl_a)
+
+#Make data tidy.
+hplc_tidy <- hplc %>%
+  pivot_longer(c(chl_c3:TChla),
+               names_to = "pigment", values_to = "concentration")
+  
+```
+
+```{r}
+#Exploratory data analysis
+
+#Statistics for pigments. A table - min,max, mean median?
+hplc_tidy %>%
+  filter(site_id == "QU39" & line_out_depth == 0) %>% 
+  group_by(pigment) %>% 
+  summarise(mean = mean(concentration, na.rm = TRUE),
+            median = median(concentration, na.rm = TRUE),
+            min = min(concentration, na.rm = TRUE),
+            max = max(concentration, na.rm = TRUE),
+            num = n())
+
+#Box plot for each pigment? This would be a lot of plots, not sure if it is necessary, but think about it
+#facet_wrap of histograms for each pigment?
+```
+
+```{r}
+#Create pigment histograms to assess distribution - Ugh issues with scales. Annoying. Should separate out into pigment group types with comparable concentrations and do a separate plot with pigment ratios. Box plots would also be beneficial
+
+# hplc_tidy %>% 
+#   filter(site_id == "QU39" & analyzing_lab == "USC" &
+#           date > "2017-01-01" & date < "2018-01-01" &
+#           pigment == "lutein") %>%
+#   ggplot(mapping = aes(concentration, fill = line_out_depth)) +
+#   geom_histogram() 
+
+# hplc_tidy %>% 
+#   filter(site_id == "QU39" & analyzing_lab == "USC" &
+#           line_out_depth == 0  &
+#           date > "2017-01-01" & date < "2018-01-01" &
+#           !pigment == "TChla" & !pigment == "fuco" ) %>% 
+#   ggplot(mapping = aes(concentration)) + 
+#   geom_histogram() +
+#   facet_wrap(~pigment, scales = "free_y") 
+```
+
+```{r}
+#This creates a correlation matrix that helps to see the relationships and groupings between pigments. Understanding the relationship between pigments guides phytoplankton group selection
+
+
+
+#par(mfrow=c(1,2)) puts side by side but cant see detail
+
+#Subset the data
+corr_plot_0m <- hplc %>% 
+  filter(site_id == "QU39" & line_out_depth == 0 &
+         date > "2018-01-01" & date < "2019-01-01") %>% 
+  select(chl_c3, chl_c1_c2:viola, allox, lutein:TChla) %>% 
+  drop_na() %>% 
+  cor() %>% 
+  corrplot(method = "color",
+         #type = "upper", #only shows upper half of square
+         addrect = 4,
+         order = "hclust", 
+         addCoef.col = "white",
+         number.cex = 0.7,
+         tl.col="black")
+
+```
+
+
+```{r}
+#Want this to show beside, but need to figure out
+corr_plot_5m <- hplc %>% 
+  filter(site_id == "QU39" & line_out_depth == 5 &
+         date > "2018-01-01" & date < "2019-01-01") %>% 
+  select(chl_c3, chl_c1_c2:viola, allox, lutein:TChla) %>% 
+  drop_na() %>% 
+  cor() %>% 
+  corrplot(method = "color",
+         #type = "upper", #only shows upper half of square
+         addrect = 4,
+         order = "hclust", 
+         addCoef.col = "white",
+         number.cex = 0.7,
+         tl.col="black")
+
+# #Significant test, but not really necessary.
+# #res1 <- cor.mtest(corr_plot, conf.level = .95)
+# 
+# #Make the plot
+# corrplot(corr_plot, 
+#          method = "color",
+#          #type = "upper", #only shows upper half of square
+#          addrect = 4,
+#          order = "hclust", 
+#          addCoef.col = "white",
+#          number.cex = 0.7,
+#          tl.col="black",
+#          #p.mat = res1$p, #include if using applying significance
+#          #sig.level = .05, #include if using applying significance
+#          #insig = "blank") #include if using applying significance
+#          #diag=FALSE) # blanks out the diagonal of 1 correlations.
+#          )
+
+```
+ 
+```{r}
+#chemtax results
+
+```
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

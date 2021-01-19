@@ -1,0 +1,57 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+#Load packages
+library(tidyverse)
+```
+
+```{r}
+hplc <- read.csv("hplc.csv")
+
+#Remove unused columns, then re-order pigments to match retention/peak time. Remove pigments not used for Chemtax (need to consider this as some might be useful). Might be best to actually keep all of the pigments and then filter for them when making plots. This way it is more adaptive?
+hplc <- hplc %>%
+  select(!c(ï..action, event_pk, rn, organization, survey, source,
+                         project_specific_id, collected:acidified,
+                         lab_technician:tac_peak, all_chl_a_flag,
+                         comments:quality_level)) %>% 
+  select(date:volume, analyzing_lab, chl_c3, chl_c1, chl_c2, chl_c1_c2, peri,
+         bf_19 = X_19_but, fuco, hf_19 = X_19_hex, neo = neoxanthin,
+         prasino = prasinoxanthin, viola = violaxanthin,
+         allox = alloxanthin, lutein, zea = zeaxanthin, chl_b,
+         TChla = total_chl_a)
+
+#Make data tidy by pivot longer.
+hplc_tidy <- hplc %>%
+  pivot_longer(c(chl_c3:TChla),
+               names_to = "pigment", values_to = "concentration")
+```
+
+```{r}
+#Setting data format for input into Chemtax - outputs csv file I can open in excel and paste into chemtax.
+format_chemtax_usc <- hplc %>% 
+  filter(site_id == "QU39" &
+         date > "2018-01-01" & date < "2019-01-01" & #Select date range
+         analyzing_lab == "USC" & #select lab that analyzed data
+         line_out_depth == 0) %>% #select depth
+  add_column(Subgroup = 1, flag = 0) %>%
+  select(Subgroup, Date = date, Station = site_id, flag,
+         depth = line_out_depth, chlc3 = chl_c3, chlc1c2 = chl_c1_c2,
+         peri, `19-but` = bf_19, fuco, `19-hex` = hf_19 ,neo, prasino, viola,
+         allo = allox, zea, lutein, chl_b, TChl_a = TChla)
+
+write.csv(format_chemtax_usc, "2018_0m_usc.csv")
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
