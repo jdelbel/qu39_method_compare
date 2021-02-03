@@ -10,13 +10,16 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 ```{r}
 library(tidyverse)
 library(readxl)
-library(dplyr)
-library(lubridate)
-library(viridis)
-library(hrbrthemes)
-library(gsw)
-library(corrr)
-library(corrplot)
+library(janitor)
+library(hutils)
+library(obistools)
+library(fuzzyjoin)
+library(devtools)
+library(remotes)
+library(XML)
+library(worrms)
+library(curl)
+library(stringr)
 ```
 
 
@@ -102,6 +105,73 @@ chem_long %>%
         text = element_text(size = 12)) +
   guides(fill = guide_legend(nrow = 1, reverse = TRUE)) 
 ```
+
+```{r}
+#Upload data output for OBIS taxonomy matching/formatting
+tax_obis <- read.csv("out_QU39_V1.2_NA_remove.csv")
+
+```
+
+```{r}
+
+#selecting important columns required for grouping data to class level.
+chem_groups <- tax_obis %>% 
+  select(date, orig_name, scientificName_accepted = valid_name, 
+         rank, kingdom:genus, lifeStage, taxonRemark,
+         identificationQualifier, count = counts)
+
+chem_groups <- chem_groups %>% 
+  mutate(Louis_class = case_when(class == "Bacillariophyceae" ~ "Bacillariophyta",
+                                 phylum == "Chlorophyta" ~ "Chlorophyta",
+                                 phylum == "Choanozoa" ~ "Choanoflagellata",
+                                 class == "Chrysophyceae" |
+                                   class == "Xanthophyceae" ~ "Chrysophyta",
+                                 phylum == "Ciliophora" ~ "Ciliophora",
+                                 class == "Cryptophyceae" ~ "Cryptophyta",
+                                 phylum == "Cyanobacteria" ~ "Cyanobacteria",
+                                 class == "Dictyochophyceae" ~ "Dictyophyta",
+                                 class == "Dinophyceae" ~ "Dinoflagellata",
+                                 class == "Ebriophyceae" ~ "Ebriidea",
+                                 phylum == "Euglenozoa" & 
+                                   (class == "Euglenoidea" | is.na(class)) ~
+                                   "Euglenophyta",
+                                 phylum == "Haptophyta" ~ "Haptophyta",
+                                 class == "Kinetoplastea" | 
+                                   orig_name == "Metromonas simplex" | 
+                                   orig_name == "Pseudobodo tremulans" | 
+                                   orig_name == "Telonema subtilis" ~ 
+                                   "Kinetoplastidea",
+                                 phylum == "Arthropoda" | 
+                                   phylum == "Chordata" ~ "Metazoa",
+                                 class == "Raphidophyceae" ~ "Raphidiophyta",
+                                 kingdom == "Protozoa" & is.na(phylum) &
+                                   is.na(class) & is.na(identificationQualifier) 
+                                   ~ "Unknown_flagellate",
+                                 kingdom == "Protozoa" & is.na(phylum) &
+                                   is.na(class) & 
+                                   identificationQualifier == "Chlorophyta?"
+                                   ~ "Unknown_Chlorophyta?",
+                                kingdom == "Protozoa" & is.na(phylum) &
+                                   is.na(class) & 
+                                   identificationQualifier == "Dinophyceae?"
+                                   ~ "Unknown_Dinophyceae?",)) %>%
+  select(date, Louis_class, Louis_name = orig_name, scientificName_accepted:count) %>% 
+  arrange(date, Louis_class, Louis_name)
+
+#Add tropic status column so I can take out heterotrophic groups - For now will do this at the class level, but it should be done on a species by species basis (notably for dinoflagellates etc). I should also make a CHEMTAX pigment group column for each species. It might actually be easier to do this in excel and then import and merge the sheet.
+
+chem_groups <- chem_groups %>% 
+  mutate(trophicStatus = case_when(Louis_class == "Bacillariophyta" ~ "auto"))
+
+
+
+#Seemed to work, but as it is right now, not separating the unknown groups, but I could fix that by making each unknown separate for this purpose. I should also add a new column with chemtax group/trophic status. Should be done in separate project as not relevant to OBIS.
+chem_sum <- chem_groups %>%
+  group_by(date, Louis_class) %>%
+  summarise(sum = sum(count))
+
+```
+
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
 
