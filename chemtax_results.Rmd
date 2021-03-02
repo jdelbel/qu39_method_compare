@@ -187,7 +187,7 @@ chem_groups <- chem_groups %>%
 #Selecting autotrophic groups from class level specifications above. Too coarse for dinos.
 chem_sum <- chem_groups %>%
   filter(trophicStatus == "auto") %>% #select autotrophic species
-  complete(date, Louis_class) %>% # make sure each day has all species
+  complete(date, Louis_class) %>% # make each day have all species, even if not observed (for joining)
   group_by(date, Louis_class) %>% 
   summarise(sum = sum(count)) %>% #sum counts for each grouping/class
   arrange(date, Louis_class) %>% 
