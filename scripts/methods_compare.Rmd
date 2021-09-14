@@ -52,9 +52,12 @@ hplc <- read.csv("hplc.csv")
 ```{r}
 #Upload output from OBIS taxonomy matching/formatting
 tax_obis <- read.csv("out_QU39_V1.2_NA_remove.csv")
-
 ```
 
+```{r}
+#Upload 16S summary data
+gen16 <- read.csv("QU39_plastid_cyano_2018_group_summary.csv")
+```
 
 ```{r}
 #Setting data format
@@ -63,6 +66,8 @@ chem_qu39$Date <- as.Date(chem_qu39$Date, "%Y-%m-%d")
 hplc$date <- as.Date(hplc$date, "%Y-%m-%d")
 
 tax_obis$date <- as.Date(tax_obis$date, "%Y-%m-%d")
+
+gen16$Date <- as.Date(gen16$Date, "%Y-%m-%d")
 ```
 
 ```{r}
@@ -109,6 +114,9 @@ neworder_chem <- c("cyan", "hapto", "green", "cryp",
 chem_long <- arrange(mutate(chem_long,
                       phyto_group = factor(phyto_group,
                                            levels = neworder_chem)), phyto_group)
+
+chem_long <- chem_long %>% 
+  arrange(date, phyto_group)
 ```
 
 ```{r}
@@ -388,7 +396,7 @@ p1 <- chem_long %>%
   group_by(run, date, site_id, phyto_group) %>% 
   summarise(TChla_mean = mean(TChla)) %>% #This computes a daily average to deal with duplicates
   filter(date > "2018-01-01" &
-           date < "2018-12-31" & run == 1) %>% 
+           date < "2018-12-31" & run == 2) %>% 
   ggplot(mapping = aes(date, TChla_mean, fill = fct_rev(phyto_group))) +
   geom_area(alpha = 0.8, size = 0.5, colour = "black") +
   scale_fill_manual(values = color_palette_chem, labels = 
@@ -450,7 +458,7 @@ p3 <- chem_sum %>%
 
 fig2 <- p1/p2/p3
 
-ggsave(filename="fig2.png", fig2, width=16, height=14, dpi=300)
+ggsave(filename="fig2_r2.png", fig2, width=16, height=14, dpi=300)
 ```
 
 
@@ -508,6 +516,106 @@ fig3 <- p1/p2
 
 ggsave(filename="fig3.png", fig3, width=16, height=10, dpi=300)
 ```
+```{r}
+#Plotting 16S relative abundances (group summary without extended groups, but including ochro, macro and unknown for a first attempt at plotting). Worked well and mostly high correspondence. Winter values different, with greater diatoms for chemtax (filtration volume issue)? We are definitely getting marker pigments for these groups in winter. Need to troubleshoot this.
+
+#Set order or groups for plotting
+gen16$summaryGroups <- factor(gen16$summaryGroups,
+                         levels = c("diat",
+                                    "dict",
+                                    "raph",
+                                    "crypto",
+                                    "green",
+                                    "hapto",
+                                    "cyan",
+                                    "ochro",
+                                    "macro",
+                                    "unk"))
+
+color_palette_gen16 <- c("#ff8000",#1  - Diatoms (orange)
+                        "#ff99c7", #2  - Dictyochophytes (pink)
+                        "#4d6600", #3  - Raphidophytes (dark green)
+                        #"#ff0000", #4  - Dinoflagellates (Red) - not captured 16S
+                        "#ffff00", #5  - Cryptophytes (yellow)
+                        "#00ff00", #6  - Chlorophyta (light green)
+                        "#7d4dcc", #7  - Haptophytes (purple)
+                        "#000000", #8  - Cyanobacteria (black)
+                        "#708090", #9  - Ochro (unknown) (slate gray)            
+                        "#2F4F4F", #10 - Macroalgae (dark slate gray)
+                        "#D3D3D3") #11 - Unknown (light gray)
+                        
+p1 <- chem_long %>% 
+  group_by(run, date, site_id, phyto_group) %>% 
+  summarise(TChla_mean = mean(TChla)) %>% #This computes a daily average to deal with duplicates
+  filter(date > "2018-01-01" &
+           date < "2019-01-01" & run == 1) %>% 
+  ggplot(mapping = aes(date, TChla_mean, fill = fct_rev(phyto_group))) +
+  geom_area(position = "fill", alpha = 0.8, size = 0.5, colour = "black") +
+  scale_fill_manual(values = color_palette_chem, labels = 
+                      c("diat/boli", "dict/chry/pela", "raph/eust", "dino", "cryp", 
+                        "chlor/eugl","hapto", "cyan")) +
+  theme_bw() +
+  labs(y = bquote("Chem. (%)"),
+       fill = "Group") +
+  scale_x_date(limits = startEnd,
+                breaks = scales::date_breaks("1 month")) +
+  theme(legend.position = "top",
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        text = element_text(size = 12)) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank(),
+        text = element_text(size = 12)) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank()) +
+  guides(fill = guide_legend(nrow = 1, reverse = TRUE)) +
+  theme(text = element_text(size = 25))
+
+
+p2 <- chem_sum %>% 
+  filter(date > "2018-01-01" & date < "2018-12-31" & 
+           !Louis_class == "Unknown_Chlorophyta?" &
+           !Louis_class == "Unknown_Dinophyceae?" &
+           !Louis_class == "Unknown_flagellate") %>% 
+  ggplot(aes(x = date, y = sum, group = Louis_class, fill = Louis_class)) +
+  geom_area(position = "fill", alpha = 0.8, size = 0.5, colour = "black") +
+  scale_fill_manual(values = color_palette_micro) +
+  scale_x_date(limits = startEnd,
+                breaks = scales::date_breaks("1 month")) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank()) +
+  labs(y = bquote("Micro. (%)")) +
+  theme(text = element_text(size = 25))
+
+p3 <- gen16 %>% 
+  ggplot(aes(Date, RelAbundance, fill = summaryGroups)) + 
+  geom_area(position = "fill", alpha = 0.8, size = 0.5, colour = "black") +
+  scale_fill_manual(values = color_palette_gen16, labels = 
+                      c("diat/boli", "dict/chry/pela", "raph/eust", "cryp", 
+                        "chlor/eugl","hapto", "cyan", "ochr", "macro", "unk.")) +
+  scale_x_date(limits = startEnd,
+               breaks = scales::date_breaks("1 month"),
+               labels = scales::date_format("%m")) +
+  theme_bw() +
+  labs(x = "Month",
+           y = bquote("16S (%)")) +
+  theme(legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.title = element_blank(),
+        legend.background =  element_blank()) +
+  guides(fill = guide_legend(nrow = 1, reverse = TRUE)) +
+  theme(text = element_text(size = 25))
+ 
+ts_comp <- p1/p2/p3
+
+ggsave(filename="fig_chem_micro_16s.png", ts_comp, width=16, height=12, dpi=300)
+```
+
+
+
+
 ```{r}
 
 #Timseries of relative abundance comparison of methods (with unidentified species)
@@ -604,7 +712,7 @@ micro_compare <- micro_wide %>%
 
 #Selecting the first chemtax run (this can change for comparisons) and calculating daily mean for duplicates (one duplicate was present for the spring bloom)
 chem_compare <- chem_long %>% 
-  filter(run == 1) %>% 
+  filter(run == 2) %>% 
   select(date, phyto_group, TChla) %>% 
   group_by(date, phyto_group) %>% 
   summarise(TChla_mean = mean(TChla)) 
@@ -637,7 +745,9 @@ chem_compare_dino <- chem_compare %>%
   rename(dino_photo_abund = count_sum)
 
 ```
-
+```{r}
+write.csv(chem_compare, "chemtax_microscopy_group_compare.csv")
+```
 
 ```{r}
 #Making scatter plots for each group comparing chematax group level TChla and microscopy abundance.
@@ -664,7 +774,7 @@ fig5 <- chem_compare %>%
   labs(x = bquote("Abundance (cells" ~ L^-1*")"),
        y = bquote("TChl (mg" ~ m^-3*")")) 
 
-ggsave(filename="fig5.png", fig5, width=16, height=10, dpi=300)
+ggsave(filename="fig5_r2.png", fig5, width=16, height=10, dpi=300)
 ```
 
 ```{r}
@@ -684,11 +794,10 @@ ggsave(filename="dino_scat.png", dino_scat, width=6, height=4, dpi=300)
 ```
 
 
-
 ```{r}
 #Making a similar plot, but comparing relative abundance.
 
-#Calculating relative abundance
+#Calculating relative abundance - it would be good to reformat this so I do this calculation on the chem_long sheet from the start. Lots of code duplication. Same with daily averaging for duplicate.
 chem_compare <- chem_compare %>% 
   arrange(date, phyto_group) %>% 
   group_by(date) %>% 
@@ -700,8 +809,11 @@ fig6 <- chem_compare %>%
   ggplot(aes(micro_rel, chem_rel, color = phyto_group)) +
   geom_point(size = 2) +
   geom_smooth(method = "lm") +
-  facet_wrap(~phyto_group, nrow = 2, scales = "free") +
+  geom_abline(slope = 1, intercept = 0) +
+  facet_wrap(~phyto_group, nrow = 2) +
   ggpubr::stat_cor(label.y.npc = 1.0, vjust = 1, size = 5) +
+  xlim(0, 1) +
+  ylim(0, 1) +
   theme_bw() +
   theme(legend.position = "none",
         text = element_text(size = 22)) +
@@ -711,14 +823,85 @@ fig6 <- chem_compare %>%
 ggsave(filename="fig6.png", fig6, width=16, height=10, dpi=300)
 ```
 
+```{r}
+#Preparing 16S data for scatterplot comparisons and plotting 
+chem_compare_16s <- chem_long %>% 
+  filter(run == 2) %>% 
+  select(date, phyto_group, TChla) %>% 
+  group_by(date, phyto_group) %>% 
+  summarise(TChla_mean = mean(TChla)) %>% 
+  ungroup() %>% 
+  group_by(date) %>% 
+  mutate(chem_rel = TChla_mean/sum(TChla_mean))
+
+#Prering the 16S general summary for joining with the chemtax data.
+gen16_compare <- gen16 %>% 
+  select(date = Date, phyto_group = summaryGroups, s16Rel = RelAbundance) %>% 
+  mutate(phyto_group = str_replace(phyto_group, "crypto", "cryp"))
+
+
+chem_compare_16s <- chem_compare_16s %>% 
+  left_join(gen16_compare)
+
+chem_compare_16s <- arrange(mutate(chem_compare_16s,
+                      phyto_group = factor(phyto_group,
+                                           levels = neworder_chem)), phyto_group) %>% 
+  arrange(date, phyto_group)
+
+chem_compare_16s %>% 
+  ggplot(aes(chem_rel, s16Rel, color = phyto_group)) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm") +
+  geom_abline(slope = 1, intercept = 0) +
+  facet_wrap(~phyto_group, nrow = 2) +
+  ggpubr::stat_cor(label.y.npc = 1.0, vjust = 1, size = 5) +
+  xlim(0, 1) +
+  ylim(0, 1) +
+  theme_bw() +
+  theme(legend.position = "none",
+        text = element_text(size = 22)) +
+  theme(panel.spacing.x = unit(1, "lines")) +
+  labs(x = "Chemtax (%)",
+       y = "16S (%)")
+
+ggsave(filename = "chem_16S_scat_2.png", width = 16, height = 10, dpi = 300)
+
+```
+
+```{r}
+#Comparing microscopy and 16S - Kept all of these separate to preserve data points that may be missing in one and not the others (could do a different join that preserves these.)
+
+chem_compare <- chem_compare %>% 
+  left_join(gen16_compare)
+
+chem_compare %>% 
+  ggplot(aes(micro_rel, s16Rel, color = phyto_group)) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm") +
+  geom_abline(slope = 1, intercept = 0) +
+  facet_wrap(~phyto_group, nrow = 2) +
+  ggpubr::stat_cor(label.y.npc = 1.0, vjust = 1, size = 5) +
+  xlim(0, 1) +
+  ylim(0, 1) +
+  theme_bw() +
+  theme(legend.position = "none",
+        text = element_text(size = 22)) +
+  theme(panel.spacing.x = unit(1, "lines")) +
+  labs(x = "Micro (%)",
+       y = "16S (%)")
+
+ggsave(filename = "micro_16S_scat.png", width = 16, height = 10, dpi = 300)
+
+```
 
 
 ```{r}
 #Make timeseries comparison for greens - add green pigments and then do this for other groups
 p1 <- chem_compare %>% 
-  pivot_longer(c(TChla_mean:micro_rel), 
+  pivot_longer(c(TChla_mean:s16Rel), 
                names_to = "type", values_to = "bio_abun") %>% 
-  filter(phyto_group == "green" & (type == "chem_rel" | type == "micro_rel")) %>% 
+  filter(phyto_group == "green" & (type == "chem_rel" | type == "micro_rel" |
+                                     type == "s16Rel")) %>% 
   ggplot(aes(date, bio_abun, color = type)) +
   geom_line(size = 1) +
   scale_x_date(limits = startEnd,
@@ -727,7 +910,8 @@ p1 <- chem_compare %>%
   theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_blank()) +
-  scale_color_brewer(palette = "Dark2", name = "", labels = c("chem.", "micro")) +
+  scale_color_brewer(palette = "Dark2", 
+                     name = "", labels = c("chem.", "micro", "16S")) +
   theme(legend.position = c(0.92, 0.9),
         legend.background =  element_blank(),
         text = element_text(size = 25)) +
@@ -804,15 +988,18 @@ p4 <- chem_groups %>%
 
 fig7 <- p1/p_test/p2/p3/p4 + plot_layout(ncol = 1, heights = c(1, 0.3, 1, 1, 1))
 
-ggsave(filename="fig7.png", fig7, width=16, height=18, dpi=300)
+ggsave(filename="fig7_2_16s.png", fig7, width=16, height=18, dpi=300)
 
 ```
+
+
 ```{r}
 #cyanobacteria
 p1 <- chem_compare %>% 
-  pivot_longer(c(TChla_mean:micro_rel), 
+  pivot_longer(c(TChla_mean:s16Rel), 
                names_to = "type", values_to = "bio_abun") %>% 
-  filter(phyto_group == "cyan" & (type == "chem_rel" | type == "micro_rel")) %>% 
+  filter(phyto_group == "cyan" & (type == "chem_rel" | type == "micro_rel" |
+                                     type == "s16Rel")) %>%  
   ggplot(aes(date, bio_abun, color = type)) +
   geom_line(size = 1) +
   scale_x_date(limits = startEnd,
@@ -821,7 +1008,8 @@ p1 <- chem_compare %>%
   theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_blank()) +
-  scale_color_brewer(palette = "Dark2", name = "", labels = c("chem.", "micro")) +
+  scale_color_brewer(palette = "Dark2", name = "",
+                     labels = c("chem.", "micro", "16S")) +
   theme(legend.position = c(0.92, 0.9),
         legend.background =  element_blank(),
         text = element_text(size = 25)) +
@@ -913,15 +1101,18 @@ p6 <- chem_groups %>%
 
 fig8 <- p1/p2/p3/p4/p5/p6 + plot_layout(ncol = 1, heights = c(1, 0.3, 1, 1, 1, 1))
 
-ggsave(filename="fig8_cyano.png", fig8, width=16, height=18, dpi=300)
+ggsave(filename="fig8_cyano_2_16S.png", fig8, width=16, height=18, dpi=300)
 
 ```
+
+
 ```{r}
 #Make timeseries comparison for haptos - add green pigments and then do this for other groups
 p1 <- chem_compare %>% 
-  pivot_longer(c(TChla_mean:micro_rel), 
+  pivot_longer(c(TChla_mean:s16Rel), 
                names_to = "type", values_to = "bio_abun") %>% 
-  filter(phyto_group == "hapto" & (type == "chem_rel" | type == "micro_rel")) %>% 
+  filter(phyto_group == "hapto" & (type == "chem_rel" | type == "micro_rel" |
+                                     type == "s16Rel")) %>%  
   ggplot(aes(date, bio_abun, color = type)) +
   geom_line(size = 1) +
   scale_x_date(limits = startEnd,
@@ -930,7 +1121,8 @@ p1 <- chem_compare %>%
   theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_blank()) +
-  scale_color_brewer(palette = "Dark2", name = "", labels = c("chem.", "micro")) +
+  scale_color_brewer(palette = "Dark2", name = "",
+                     labels = c("chem.", "micro", "16S")) +
   theme(legend.position = c(0.92, 0.9),
         legend.background =  element_blank(),
         text = element_text(size = 25)) +
@@ -1029,12 +1221,15 @@ fig9 <- p1/p2/p3/p4/p5/p6 + plot_layout(ncol = 1, heights = c(1, 0.3, 1, 1, 1, 1
 
 ggsave(filename="fig9_hapto.png", fig9, width=16, height=20, dpi=300)
 ```
+
+
 ```{r}
 #Make timeseries comparison for cryptos 
 p1 <- chem_compare %>% 
-  pivot_longer(c(TChla_mean:micro_rel), 
+  pivot_longer(c(TChla_mean:s16Rel), 
                names_to = "type", values_to = "bio_abun") %>% 
-  filter(phyto_group == "cryp" & (type == "chem_rel" | type == "micro_rel")) %>% 
+  filter(phyto_group == "cryp" & (type == "chem_rel" | type == "micro_rel" |
+                                     type == "s16Rel")) %>% 
   ggplot(aes(date, bio_abun, color = type)) +
   geom_line(size = 1) +
   scale_x_date(limits = startEnd,
@@ -1043,7 +1238,8 @@ p1 <- chem_compare %>%
   theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_blank()) +
-  scale_color_brewer(palette = "Dark2", name = "", labels = c("chem.", "micro")) +
+  scale_color_brewer(palette = "Dark2", name = "",
+                     labels = c("chem.", "micro", "16S")) +
   theme(legend.position = c(0.92, 0.9),
         legend.background =  element_blank(),
         text = element_text(size = 25)) +
@@ -1119,8 +1315,11 @@ p5 <- chem_groups %>%
 
 fig10 <- p1/p2/p3/p4/p5 + plot_layout(ncol = 1, heights = c(1, 0.3, 1, 1, 1))
 
-ggsave(filename="fig10_cryp.png", fig10, width=16, height=18, dpi=300)
+ggsave(filename="fig10_cryp_2_16S.png", fig10, width=16, height=18, dpi=300)
 ```
+
+
+
 ```{r}
 #Make timeseries comparison for dinos 
 p1 <- chem_compare %>% 
@@ -1240,124 +1439,15 @@ fig11 <- p1/p2/p3/p4/p5/p6 + plot_layout(ncol = 1, heights = c(1, 0.3, 1, 1, 1, 
 
 ggsave(filename="fig11_dino.png", fig11, width = 16, height = 20, dpi = 300)
 ```
-```{r}
-#Make timeseries comparison for raph 
-p1 <- chem_compare %>% 
-  pivot_longer(c(TChla_mean:micro_rel), 
-               names_to = "type", values_to = "bio_abun") %>% 
-  filter(phyto_group == "raph" & (type == "chem_rel" | type == "micro_rel")) %>% 
-  ggplot(aes(date, bio_abun, color = type)) +
-  geom_line(size = 1) +
-  scale_x_date(limits = startEnd,
-               breaks = scales::date_breaks("1 month"),
-               labels = scales::date_format("%m")) +
-  theme_bw() +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank()) +
-  scale_color_brewer(palette = "Dark2", name = "", labels = c("chem.", "micro")) +
-  theme(legend.position = c(0.92, 0.9),
-        legend.background =  element_blank(),
-        text = element_text(size = 25)) +
-  labs(y = "Relative Abund. (%)", title = "Raphidophyta")
-
-p2 <- chem_compare %>% 
-  mutate(diff = chem_rel - micro_rel,
-         pos = chem_rel > micro_rel) %>% 
-  filter(phyto_group == "raph") %>% 
-  ggplot(aes(date, diff, fill = pos)) +
-  geom_col(position = "identity", colour = "black", size = 0.25) +
-  scale_fill_manual(values = c("#CCEEFF", "#FFDDDD"), guide = FALSE) +
-  scale_x_date(limits = startEnd,
-               breaks = scales::date_breaks("1 month"),
-               labels = scales::date_format("%m")) +
-  theme_bw() +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 25)) +
-  labs(y = "Diff.")
 
 
-p3 <- chem_compare %>%
-  filter(phyto_group == "raph") %>% 
-  ggplot(aes(date)) +
-  geom_line(aes(y = TChla_mean), size = 1) +
-  scale_x_date(limits = startEnd,
-               breaks = scales::date_breaks("1 month"),
-               labels = scales::date_format("%m")) +
-  theme_bw() +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 25)) +
-  labs(y = bquote("Raph. (mg" ~ m^-3*")"))
-
-p4 <- hplc_qu39_tidy %>% 
-  filter(date > "2018-01-01" & date < "2018-12-31" & (pigments == "viola" |
-                                                      pigments == "chl_c1_c2")) %>%
-  group_by(date, pigments) %>% 
-  summarise(concentration_mean = mean(concentration)) %>% 
-  ggplot(aes(date, concentration_mean, color = fct_rev(pigments))) +
-  geom_line(size = 1) +
-  scale_color_brewer(palette = "Dark2", name = "",) +
-  theme_bw() +
-  scale_x_date(limits = startEnd,
-               breaks = scales::date_breaks("1 month"),
-               labels = scales::date_format("%m")) +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 25),
-        legend.position = c(0.92, 0.9),
-        legend.background =  element_blank()) +
-  labs(y = bquote("Pigment (mg" ~ m^-3*")"))
-
-p5 <- hplc_qu39_tidy %>% 
-  filter(date > "2018-01-01" & date < "2018-12-31" & (pigments == "viola" |
-                                                      pigments == "chl_c1_c2")) %>%
-  group_by(date, pigments) %>% 
-  summarise(pigRat_mean = mean(pig_rat)) %>% 
-  ggplot(aes(date, pigRat_mean, color = fct_rev(pigments))) +
-  geom_line(size = 1) +
-  scale_color_brewer(palette = "Dark2", name = "",) +
-  theme_bw() +
-  scale_x_date(limits = startEnd,
-               breaks = scales::date_breaks("1 month"),
-               labels = scales::date_format("%m")) +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        text = element_text(size = 25),
-        legend.position = c(0.92, 0.9),
-        legend.background =  element_blank()) +
-  labs(y = "Pigment:TChla")
-
-p6 <- chem_groups %>% 
-  filter(Louis_class == "Raphidiophyta" &
-           date > "2018-01-01" &
-           date < "2018-12-31") %>%
-  complete(date, Louis_class, scientificName_accepted) %>% 
-  mutate(count = replace_na(count, 0)) %>% 
-  ggplot(aes(date, count, fill = scientificName_accepted)) +
-  geom_point(size = 5, pch = 21, color = "black" ) +
-  scale_x_date(limits = startEnd,
-               breaks = scales::date_breaks("1 month"),
-               labels = scales::date_format("%m")) +
-  scale_fill_discrete(name = "",) +
-  theme_bw() +
-  theme(legend.position = c(0.14, 0.92),
-        legend.background =  element_blank(),
-        text = element_text(size = 25)) +
-  labs(x = "Date",
-       y = bquote("Abundance (cells" ~ L^-1*")"))
-
-fig12 <- p1/p2/p3/p4/p5/p6 + plot_layout(ncol = 1, 
-                                             heights = c(1, 0.3, 1, 1, 1, 1))
-
-ggsave(filename="fig12_Raph.png", fig12, width=16, height=20, dpi=300)
-```
 ```{r}
 #Make timeseries comparison for Dictyo
 p1 <- chem_compare %>% 
-  pivot_longer(c(TChla_mean:micro_rel), 
+  pivot_longer(c(TChla_mean:s16Rel), 
                names_to = "type", values_to = "bio_abun") %>% 
-  filter(phyto_group == "dict" & (type == "chem_rel" | type == "micro_rel")) %>% 
+  filter(phyto_group == "dict" & (type == "chem_rel" | type == "micro_rel" |
+                                     type == "s16Rel")) %>% 
   ggplot(aes(date, bio_abun, color = type)) +
   geom_line(size = 1) +
   scale_x_date(limits = startEnd,
@@ -1366,7 +1456,8 @@ p1 <- chem_compare %>%
   theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_blank()) +
-  scale_color_brewer(palette = "Dark2", name = "", labels = c("chem.", "micro")) +
+  scale_color_brewer(palette = "Dark2", name = "",
+                     labels = c("chem.", "micro", "16S")) +
   theme(legend.position = c(0.92, 0.9),
         legend.background =  element_blank(),
         text = element_text(size = 25)) +
@@ -1462,14 +1553,16 @@ p6 <- chem_groups %>%
 fig13 <- p1/p2/p3/p4/p5/p6 + plot_layout(ncol = 1, 
                                              heights = c(1, 0.3, 1, 1, 1, 1))
 
-ggsave(filename="fig13_Dict.png", fig13, width=16, height=20, dpi=300)
+ggsave(filename="fig13_Dict_2_16S.png", fig13, width=16, height=20, dpi=300)
 ```
+
 ```{r}
 #Make timeseries comparison for Diatoms
 p1 <- chem_compare %>% 
-  pivot_longer(c(TChla_mean:micro_rel), 
+  pivot_longer(c(TChla_mean:s16Rel), 
                names_to = "type", values_to = "bio_abun") %>% 
-  filter(phyto_group == "diat" & (type == "chem_rel" | type == "micro_rel")) %>% 
+  filter(phyto_group == "diat" & (type == "chem_rel" | type == "micro_rel" |
+                                     type == "s16Rel")) %>% 
   ggplot(aes(date, bio_abun, color = type)) +
   geom_line(size = 1) +
   scale_x_date(limits = startEnd,
@@ -1478,7 +1571,8 @@ p1 <- chem_compare %>%
   theme_bw() +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_blank()) +
-  scale_color_brewer(palette = "Dark2", name = "", labels = c("chem.", "micro")) +
+  scale_color_brewer(palette = "Dark2", name = "",
+                     labels = c("chem.", "micro", "16S")) +
   theme(legend.position = c(0.92, 0.9),
         legend.background =  element_blank(),
         text = element_text(size = 25)) +
