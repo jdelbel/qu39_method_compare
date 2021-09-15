@@ -3,24 +3,21 @@ title: "R Notebook"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
-
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
-
 ```{r}
 library(tidyverse)
 library(readxl)
-library(janitor)
-library(hutils)
-library(obistools)
-library(fuzzyjoin)
-library(devtools)
-library(remotes)
-library(XML)
-library(worrms)
-library(curl)
-library(stringr)
-library(patchwork)
+library(here)
+# library(janitor)
+# library(hutils)
+# library(obistools)
+# library(fuzzyjoin)
+# library(devtools)
+# library(remotes)
+# library(XML)
+# library(worrms)
+# library(curl)
+# library(stringr)
+# library(patchwork)
 ```
 
 
@@ -29,13 +26,13 @@ library(patchwork)
 #Uploading chemtax results - separated by station
 
 #Chemtax run on initial input ratios
-chem_qu39_1 <- read_xls("manu_rats_0m_2018_raph.xls",
+chem_qu39_1 <- read_xls(here("files", "manu_rats_0m_2018_raph.xls"),
                  sheet = "DataSummaryR1_3",
                  range = "E259:Q299") %>% 
   add_column(run = 1)
 
 #chemtax run on output ratios of initial run 
-chem_qu39_2 <- read_xls("manu_rats_0m_2018_raph.xls",
+chem_qu39_2 <- read_xls(here("files", "manu_rats_0m_2018_raph.xls"),
                  sheet = "DataSummaryR4_6",
                  range = "E259:Q299") %>% 
   add_column(run = 2)
@@ -46,18 +43,36 @@ chem_qu39 <- bind_rows(chem_qu39_1, chem_qu39_2)
 
 ```{r}
 #Import HPLC for comparison
-hplc <- read.csv("hplc.csv")
+hplc <- read.csv(here("files", "hplc.csv"))
 ```
 
 ```{r}
 #Upload output from OBIS taxonomy matching/formatting
-tax_obis <- read.csv("out_QU39_V1.2_NA_remove.csv")
+tax_obis <- read.csv(here("files", "out_QU39_V1.2_NA_remove.csv"))
 ```
 
 ```{r}
 #Upload 16S summary data
-gen16 <- read.csv("QU39_plastid_cyano_2018_group_summary.csv")
+gen16 <- read.csv(here("files", "QU39_plastid_cyano_2018_group_summary.csv"))
 ```
+
+```{r}
+#Upload 18S summary data - Dates are wrong - Showing 2014 and a day off. Importa metadata from portal and merge on Hakai-ID for correct dates.
+
+#Upload summary from Colleen - Species grouped into Chemtax groups
+gen18 <- read.csv(here("files", "euk18S_phytogroup_summary.csv")) %>% 
+  rename(hakai_id = Sample)
+
+#Upload portal metadata
+gen18_meta <- read.csv(here("files", "meta_18s.csv")) %>% 
+  select(date, hakai_id)
+
+gen18_test <- gen18 %>% 
+  left_join(gen18_meta, by = "hakai_id") %>% 
+  select(!Date) %>% 
+  relocate(date, .after = "hakai_id")
+```
+
 
 ```{r}
 #Setting data format
@@ -68,6 +83,8 @@ hplc$date <- as.Date(hplc$date, "%Y-%m-%d")
 tax_obis$date <- as.Date(tax_obis$date, "%Y-%m-%d")
 
 gen16$Date <- as.Date(gen16$Date, "%Y-%m-%d")
+
+gen18$date <- as.Date(gen18$date, "%Y-%m-%d")
 ```
 
 ```{r}
@@ -265,55 +282,57 @@ chem_long %>%
 
 
 ```{r}
-#Trying to get attributes from worms (trophic status/Functional group) to determine heterotroph/mixto/photo. Didn't really work very well. Some species have multiple attributes and designations are confusing. Lots missing. Takes forever to run, might be worth removing.
+#Not sure if this is necessary - didn't really work
 
-#Unique list of worms accepted species and aphiaID
-chem_unique <- tax_obis %>% 
-  select(valid_name, AphiaID) %>% 
-  distinct()
-
-#Pulling attribute data from Worrms - This should be done in a different file and then imported in. Time consuming!
-chem_unique_func <- chem_unique$AphiaID %>% 
-  worrms::wm_attr_data_()
-
-#Selecting only functional group determination (also has other useful measures - i.e. size). ISSUE is that there are duplicates (for single species, two rows, 1) phytoplankton, 2) benthos
-chem_unique_func <- chem_unique_func %>% 
-  filter(measurementType == "Functional group") %>% 
-  select(AphiaID, measurementType, measurementValue) %>% 
-  mutate(AphiaID = as.numeric(AphiaID))
-
-#joining attribute data back to unique list - see duplicates, might be able to filter out.
-chem_func_join <- chem_unique %>% 
-  left_join(chem_unique_func)
-
-#Abandoning this for now and just removing any size information... Unfortunately, the measuremeantValue functional group contains phyto/mixo/zoop and also measures of size (micro/nano/meso). This creates duplicates because the same species/aphia ID will have both a trophic and size qualifier. Trying to move the size qualifiers to new column and then remerging.
-# chem_func_size <- chem_func_join %>% 
-#   mutate(size_1 = case_when(measurementValue == 
-#                               "plankton > microplankton" ~ "microplankton")) %>% 
-#   mutate(size_2 = case_when(measurementValue == 
-#                               "plankton > nanoplankton" ~ "nanoplankton")) %>% 
-#   mutate(size_3 = case_when(measurementValue == 
-#                                        "plankton > mesoplankton" ~ "mesoplankton")) %>% 
-#   mutate(dormant = case_when(measurementValue == "benthos" ~ "benthos"))
-                                       
-                            
-#Removing size qualifiers. One duplicate remained (Noctiluca scintillans), which is classed as both zooplankton and mixotroph. Keeping mixotroph
-chem_func_clean <-  chem_func_join %>% 
-  filter(!measurementValue == "plankton > microplankton" &
-         !measurementValue == "plankton > nanoplankton" &
-         !measurementValue == "plankton > mesoplankton" &                                                      !measurementValue == "benthos") %>% 
-  filter(!(valid_name == "Noctiluca scintillans" & 
-             measurementValue == "plankton > zooplankton")) %>% 
-  select(AphiaID, functionalGroup = measurementValue)
-  
-#MAking sure no duplicates remain in the dataset.
-chem_func_dup <- chem_func_clean %>% 
-  group_by(AphiaID) %>% 
-  filter(n() > 1)
-
-#joining attribute data to field data - same number of rows after join.
-chem_groups <- chem_groups %>% 
-  left_join(chem_func_clean, by = "AphiaID")
+# #Trying to get attributes from worms (trophic status/Functional group) to determine heterotroph/mixto/photo. Didn't really work very well. Some species have multiple attributes and designations are confusing. Lots missing. Takes forever to run, might be worth removing.
+# 
+# #Unique list of worms accepted species and aphiaID
+# chem_unique <- tax_obis %>% 
+#   select(valid_name, AphiaID) %>% 
+#   distinct()
+# 
+# #Pulling attribute data from Worrms - This should be done in a different file and then imported in. Time consuming!
+# chem_unique_func <- chem_unique$AphiaID %>% 
+#   worrms::wm_attr_data_()
+# 
+# #Selecting only functional group determination (also has other useful measures - i.e. size). ISSUE is that there are duplicates (for single species, two rows, 1) phytoplankton, 2) benthos
+# chem_unique_func <- chem_unique_func %>% 
+#   filter(measurementType == "Functional group") %>% 
+#   select(AphiaID, measurementType, measurementValue) %>% 
+#   mutate(AphiaID = as.numeric(AphiaID))
+# 
+# #joining attribute data back to unique list - see duplicates, might be able to filter out.
+# chem_func_join <- chem_unique %>% 
+#   left_join(chem_unique_func)
+# 
+# #Abandoning this for now and just removing any size information... Unfortunately, the measuremeantValue functional group contains phyto/mixo/zoop and also measures of size (micro/nano/meso). This creates duplicates because the same species/aphia ID will have both a trophic and size qualifier. Trying to move the size qualifiers to new column and then remerging.
+# # chem_func_size <- chem_func_join %>% 
+# #   mutate(size_1 = case_when(measurementValue == 
+# #                               "plankton > microplankton" ~ "microplankton")) %>% 
+# #   mutate(size_2 = case_when(measurementValue == 
+# #                               "plankton > nanoplankton" ~ "nanoplankton")) %>% 
+# #   mutate(size_3 = case_when(measurementValue == 
+# #                                        "plankton > mesoplankton" ~ "mesoplankton")) %>% 
+# #   mutate(dormant = case_when(measurementValue == "benthos" ~ "benthos"))
+#                                        
+#                             
+# #Removing size qualifiers. One duplicate remained (Noctiluca scintillans), which is classed as both zooplankton and mixotroph. Keeping mixotroph
+# chem_func_clean <-  chem_func_join %>% 
+#   filter(!measurementValue == "plankton > microplankton" &
+#          !measurementValue == "plankton > nanoplankton" &
+#          !measurementValue == "plankton > mesoplankton" &                                                      !measurementValue == "benthos") %>% 
+#   filter(!(valid_name == "Noctiluca scintillans" & 
+#              measurementValue == "plankton > zooplankton")) %>% 
+#   select(AphiaID, functionalGroup = measurementValue)
+#   
+# #MAking sure no duplicates remain in the dataset.
+# chem_func_dup <- chem_func_clean %>% 
+#   group_by(AphiaID) %>% 
+#   filter(n() > 1)
+# 
+# #joining attribute data to field data - same number of rows after join.
+# chem_groups <- chem_groups %>% 
+#   left_join(chem_func_clean, by = "AphiaID")
 ```
 
 ```{r}
